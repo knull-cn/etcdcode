@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 const (
@@ -21,9 +22,30 @@ type Monitor struct {
 	mine     EMonitorNode
 	monitors []EMonitorNode
 	etcd     *myetcd.MyEtcd
+	//
+	buf sync.Map
 }
 
 var mobj *Monitor
+
+func (m *Monitor) GetNodes() (buf []myetcd.EtcdKeyValue) {
+	m.buf.Range(func(k, v interface{}) bool {
+		buf = append(buf, myetcd.EtcdKeyValue{
+			k.(myetcd.EtcdKey),
+			v.(myetcd.EtcdValue),
+		})
+		return true
+	})
+	return buf
+}
+
+func (m *Monitor) onEvent(ev *myetcd.WatchEvent) {
+	if ev.Do == myetcd.EE_DEL {
+		m.buf.Delete(ev.EKV.Key)
+	} else {
+		m.buf.Store(ev.EKV.Key, ev.EKV.Value)
+	}
+}
 
 func (m *Monitor) registkey(key, value string) string {
 	//return filepath.Join("monitor", key, value)
@@ -84,6 +106,7 @@ func (m *Monitor) monitor(mrchan chan<- MonitorRsp) {
 				m.etcd.KeepAlive(MONITOR_TTL)
 			}
 		} else {
+			m.onEvent(rsp)
 			mrchan <- MonitorRsp{
 				rsp.Do,
 				&myetcd.EtcdKeyValue{
