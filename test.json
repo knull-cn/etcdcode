@@ -1,0 +1,25 @@
+{
+    "sysname": "knull",
+    "mnodes": [
+        {
+            "pname": "gateway",
+            "address": ":9877"
+        },
+        {
+            "pname": "logic",
+            "address": ":9876"
+        },
+        {
+            "pname": "room",
+            "address": ":9875"
+        },
+        {
+            "pname": "dbmgr",
+            "address": ":9874"
+        },
+        {
+            "pname": "example",
+            "address": ":9873"
+        }
+    ]
+}
