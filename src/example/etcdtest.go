@@ -12,7 +12,7 @@ import (
 
 var (
 	//etcdaddr = []string{":2370", ":2371", ":2372", ":2379"}
-	etcdaddr = []string{"192.168.13.101:2379"}
+	etcdaddr = []string{"192.168.116.251:2379"}
 	baseport = int64(9000)
 )
 

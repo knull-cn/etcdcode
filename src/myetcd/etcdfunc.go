@@ -146,7 +146,7 @@ func watch(cli *v3.Client, key string, mychan chan<- *WatchEvent) {
 		wrsp := <-wchan
 		var we *WatchEvent
 		for _, ev := range wrsp.Events {
-			LogDbg("watch : %+v", ev.Kv.String())
+			//LogDbg("watch : %+v", ev.Kv.String())
 			switch int(ev.Type) {
 			case 0: //mvccpb.PUT
 				we = &WatchEvent{

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	clientv3 "github.com/coreos/etcd/clientv3"
 	"golang.org/x/net/context"
-	"logger"
+	//"logger"
 	//"path/filepath"
 	"time"
 )
@@ -68,13 +68,13 @@ func (me *MyEtcd) Initialize() error {
 }
 
 func (me *MyEtcd) KeepAlive(leaseid clientv3.LeaseID) error {
-	kachan, err := me.Client.KeepAlive(context.TODO(), leaseid)
-	go func() {
-		for {
-			rsp := <-kachan
-			logger.LogDbg(rsp.String())
-		}
-	}()
+	_, err := me.Client.KeepAlive(context.TODO(), leaseid)
+	// go func() {
+	// 	for {
+	// 		rsp := <-kachan
+	// 		logger.LogDbg(rsp.String())
+	// 	}
+	// }()
 	return err
 }
 

@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"bytes"
 	"logger"
 	"myetcd"
 	"os"
@@ -23,28 +24,44 @@ type Monitor struct {
 	monitors []EMonitorNode
 	etcd     *myetcd.MyEtcd
 	//
-	buf sync.Map
+	mtx sync.RWMutex
+	buf map[string]myetcd.EtcdValue
 }
 
 var mobj *Monitor
 
 func (m *Monitor) GetNodes() (buf []myetcd.EtcdKeyValue) {
-	m.buf.Range(func(k, v interface{}) bool {
+	// m.buf.Range(func(k, v interface{}) bool {
+	// 	buf = append(buf, myetcd.EtcdKeyValue{
+	// 		myetcd.EtcdKey(k.(string)),
+	// 		v.(myetcd.EtcdValue),
+	// 	})
+	// 	//logger.LogDbg("GetNodes k=%+v;v=%+v;", k, v)
+	// 	return true
+	// })
+	m.mtx.RLock()
+	for k, v := range m.buf {
 		buf = append(buf, myetcd.EtcdKeyValue{
-			k.(myetcd.EtcdKey),
-			v.(myetcd.EtcdValue),
+			[]byte(k),
+			v,
 		})
-		return true
-	})
+	}
+	m.mtx.RUnlock()
+	//logger.LogInfo("push buf %d", len(buf))
 	return buf
 }
 
 func (m *Monitor) onEvent(ev *myetcd.WatchEvent) {
+	m.mtx.Lock()
 	if ev.Do == myetcd.EE_DEL {
-		m.buf.Delete(ev.EKV.Key)
+		delete(m.buf, string(ev.EKV.Key))
+		//logger.LogInfo("delete %s", ev.EKV.Key)
 	} else {
-		m.buf.Store(ev.EKV.Key, ev.EKV.Value)
+		m.buf[string(ev.EKV.Key)] = ev.EKV.Value
+		//m.buf.Store(string(ev.EKV.Key), ev.EKV.Value)
+		//logger.LogInfo("insert %s", ev.EKV.Key)
 	}
+	m.mtx.Unlock()
 }
 
 func (m *Monitor) registkey(key, value string) string {
@@ -70,6 +87,8 @@ func (m *Monitor) Register() {
 		return
 	}
 	m.etcd.KeepAlive(leaseid)
+
+	//m.buf.Store(rkey, myetcd.EtcdValue(m.mine.PAddr))
 	//
 	// m.etcd.Watch(rkey, func(ev myetcd.ETCD_EVENT, _ *myetcd.EtcdKeyValue) {
 	// 	if ev == myetcd.EE_DEL {
@@ -98,15 +117,15 @@ func (m *Monitor) monitor(mrchan chan<- MonitorRsp) {
 	wchan := m.etcd.Watch(rkey)
 	for {
 		rsp := <-wchan
+		m.onEvent(rsp)
 		rkey := m.registkey(m.mine.PName, m.mine.PAddr)
-		if string(rsp.EKV.Key) == rkey {
-			logger.LogDbg("regist key(%s) deleted", rkey)
+		if bytes.Contains(rsp.EKV.Key, []byte(rkey)) {
 			if rsp.Do == myetcd.EE_DEL {
+				logger.LogDbg("regist key(%s) deleted", rkey)
 				m.etcd.Set(rkey, m.mine.PAddr)
 				m.etcd.KeepAlive(MONITOR_TTL)
 			}
 		} else {
-			m.onEvent(rsp)
 			mrchan <- MonitorRsp{
 				rsp.Do,
 				&myetcd.EtcdKeyValue{
@@ -118,10 +137,31 @@ func (m *Monitor) monitor(mrchan chan<- MonitorRsp) {
 	}
 }
 
+func (m *Monitor) initmap(cfg *MonitorCfg) bool {
+	//get
+	result, ok := m.etcd.GetByPrefix("monitor")
+	if !ok {
+		return false
+	}
+	m.mtx.Lock()
+	for _, rnode := range result {
+		for _, node := range cfg.Nodes {
+			rkey := m.registkey(node.PName, node.PAddr)
+			if bytes.Contains(rnode.Key, []byte(rkey)) {
+				m.buf[string(rnode.Key)] = myetcd.EtcdValue(m.mine.PAddr)
+				break
+			}
+		}
+	}
+	m.mtx.Unlock()
+	return true
+}
+
 func newMonitor(cfg *MonitorCfg, etcdaddres []string) *Monitor {
 	program := strings.Split(filepath.Base(os.Args[0]), ".")[0]
 	logger.LogDbg("%s start monitor", program)
 	var obj Monitor
+	obj.buf = make(map[string]myetcd.EtcdValue)
 	obj.etcd = myetcd.NewMyEtcd(cfg.SysName, etcdaddres)
 	for _, node := range cfg.Nodes {
 		if node.PName == program {
@@ -150,10 +190,14 @@ func StartMonitor(path string, etcdaddres []string) (<-chan MonitorRsp, bool) {
 		logger.LogErr("Initialize error:%s", err.Error())
 		return nil, false
 	}
-	//clean;
-
+	//map init;
+	mobj.initmap(cfg)
 	//
 	go mobj.Register()
 
 	return mobj.Monitor(), true
+}
+
+func GetNodes() []myetcd.EtcdKeyValue {
+	return mobj.GetNodes()
 }
