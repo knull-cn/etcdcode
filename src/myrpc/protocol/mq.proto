@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package protocol;
+
+service MQService {
+    rpc HelloWorld(HelloWorldRequest) returns (HelloWorldReply) {
+    }
+}
+
+message Null{
+}
+
+message HelloWorldRequest{
+    string data = 1;
+}
+
+message HelloWorldReply{
+    string data = 1;
+}
+
+
+
+

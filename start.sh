@@ -1,10 +1,11 @@
 #!/bin/sh
-cp example.exe test/dbmgr 
-cp example.exe test/example 
-cp example.exe test/gateway 
-cp example.exe test/logic 
-cp example.exe test/room 
-cp example.exe test/upload 
+basedir=./bin
+cp $basedir/example test/dbmgr 
+cp $basedir/example test/example 
+cp $basedir/example test/gateway 
+cp $basedir/example test/logic 
+cp $basedir/example test/room 
+cp $basedir/example test/upload 
 
 test/dbmgr &
 test/example &
