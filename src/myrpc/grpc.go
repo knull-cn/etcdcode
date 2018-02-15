@@ -8,7 +8,7 @@ import (
 	"net"
 )
 
-type ServerAttach func(s *grpc.Server) interface{}
+type ServerAttach func(s *grpc.Server, n string) interface{}
 
 type GSinfoCred struct {
 	Pem string
@@ -39,8 +39,45 @@ func CreateServer(info GrcpServerInfo, attach ServerAttach) (interface{}, error)
 	}
 
 	grpcServer := grpc.NewServer(opts...)
-	svr := attach(grpcServer)
+	svr := attach(grpcServer, info.Name)
 	go grpcServer.Serve(lis)
 
 	return svr, nil
+}
+
+//-----------------------------------------------
+type GrpcClientInfo struct {
+	Cred       GSinfoCred
+	Name       string
+	ServerName string
+}
+
+type ClientAttach func(s *grpc.ClientConn, n string) interface{}
+
+func CreateClient(info GrpcClientInfo, attach ClientAttach) (interface{}, error) {
+	//
+	var opts []grpc.DialOption
+	//
+	resolver := NewResolver(info.ServerName)
+	round := grpc.RoundRobin(resolver)
+	opts = []grpc.DialOption{grpc.WithBalancer(round)}
+	//
+	cred := &info.Cred
+	if cred.Pem != string("") && cred.Key != string("") {
+		creds, err := credentials.NewServerTLSFromFile(cred.Pem, cred.Key)
+		if err != nil {
+			glog.Error("Failed to generate credentials ", err)
+			return nil, err
+		}
+		opts = append(opts, grpc.WithTransportCredentials(creds))
+	} else {
+		opts = append(opts, grpc.WithInsecure())
+	}
+	conn, err := grpc.Dial(info.Name, opts...)
+	if err != nil {
+		glog.Error("Failed to generate credentials ", err)
+		return nil, err
+	}
+
+	return attach(conn, info.Name), nil
 }

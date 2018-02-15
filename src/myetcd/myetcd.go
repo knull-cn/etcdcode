@@ -4,7 +4,7 @@ import (
 	"fmt"
 	clientv3 "github.com/coreos/etcd/clientv3"
 	"golang.org/x/net/context"
-	//"logger"
+	. "logger"
 	//"path/filepath"
 	"time"
 )
@@ -69,12 +69,6 @@ func (me *MyEtcd) Initialize() error {
 
 func (me *MyEtcd) KeepAlive(leaseid clientv3.LeaseID) error {
 	_, err := me.Client.KeepAlive(context.TODO(), leaseid)
-	// go func() {
-	// 	for {
-	// 		rsp := <-kachan
-	// 		logger.LogDbg(rsp.String())
-	// 	}
-	// }()
 	return err
 }
 
@@ -84,30 +78,116 @@ func (me *MyEtcd) lkey(key string) string {
 }
 
 func (me *MyEtcd) Set(key, value string) bool {
-	//lkey := filepath.Join(me.prefix, key)
-	//lkey := me.prefix + key + "/"
-	return set(me.Client, me.lkey(key), value)
+	lkey := me.lkey(key)
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
+	LogDbg("put(%s) value(%s)", lkey, value)
+	_, err := me.Client.Put(ctx, lkey, value)
+	if err != nil {
+		cancel()
+		LogErr("Set %s", err.Error())
+		return false
+	}
+	return true
 }
 
 func (me *MyEtcd) GrantSet(key, value string, ttl int) (clientv3.LeaseID, bool) {
-	//lkey := filepath.Join(me.prefix, key)
-	//lkey := me.prefix + key + "/"
-	return grantSet(me.Client, me.lkey(key), value, ttl)
+	lkey := me.lkey(key)
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
+	resp, err := me.Client.Grant(context.TODO(), int64(ttl))
+	if err != nil {
+		LogErr("Grant error:%s", err.Error())
+		return 0, false
+	}
+	LogDbg("grant put(%s) value(%s)", lkey, value)
+	_, err = me.Client.Put(ctx, lkey, value, clientv3.WithLease(resp.ID))
+	if err != nil {
+		cancel()
+		LogErr("Set %s", err.Error())
+		return 0, false
+	}
+	return resp.ID, true
 }
 
 func (me *MyEtcd) Get(key string) ([]*EtcdKeyValue, bool) {
-	//lkey := me.prefix + key + "/"
-	return get(me.Client, me.lkey(key))
+	lkey := me.lkey(key)
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
+	rsp, err := me.Client.Get(ctx, lkey)
+	if err != nil {
+		cancel()
+		LogErr("Get %s", err.Error())
+		return nil, false
+	}
+	result := make([]*EtcdKeyValue, len(rsp.Kvs))
+	for idx, kv := range rsp.Kvs {
+		result[idx] = &EtcdKeyValue{
+			me.returnKey(kv.Key),
+			kv.Value,
+		}
+	}
+	return result, true
 }
 
 func (me *MyEtcd) GetByPrefix(key string) ([]*EtcdKeyValue, bool) {
-	//lkey := me.prefix + key + "/"
-	return getPrefix(me.Client, me.lkey(key))
+	lkey := me.lkey(key)
+	ctx, cancel := context.WithTimeout(context.TODO(), timeout)
+	LogDbg("getPrefix=%s", key)
+	rsp, err := me.Client.Get(ctx, lkey, clientv3.WithPrefix())
+	if err != nil {
+		cancel()
+		LogErr("Get %s", err.Error())
+		return nil, false
+	}
+	result := make([]*EtcdKeyValue, len(rsp.Kvs))
+	for idx, kv := range rsp.Kvs {
+		result[idx] = &EtcdKeyValue{
+			me.returnKey(kv.Key),
+			kv.Value,
+		}
+	}
+	return result, true
+}
+
+func (me *MyEtcd) returnKey(k EtcdKey) EtcdKey {
+	return []byte(k)[len(me.prefix):]
+}
+
+func (me *MyEtcd) watch(key string, mychan chan<- *WatchEvent) {
+	LogDbg("watch prefix key=%s", key)
+	wchan := me.Client.Watch(context.TODO(), key, clientv3.WithPrefix())
+	for {
+		wrsp := <-wchan
+		var we *WatchEvent
+		for _, ev := range wrsp.Events {
+			//LogDbg("watch : %+v", ev.Kv.String())
+			switch int(ev.Type) {
+			case 0: //mvccpb.PUT
+				we = &WatchEvent{
+					EE_PUT,
+					EtcdKeyValue{
+						me.returnKey(ev.Kv.Key),
+						ev.Kv.Value,
+					},
+				}
+			case 1: //mvccpb.DELETE
+				we = &WatchEvent{
+					EE_DEL,
+					EtcdKeyValue{
+						me.returnKey(ev.Kv.Key),
+						ev.Kv.Value,
+					},
+				}
+			default:
+				LogErr("unknow type:%+v", ev.Type)
+			}
+			mychan <- we
+		}
+	}
+	LogInfo("watch exit")
 }
 
 func (me *MyEtcd) Watch(key string) WatchChan {
 	rspchan := make(chan *WatchEvent)
 	//lkey := me.prefix + key + "/"
-	go watch(me.Client, me.lkey(key), rspchan)
+	go me.watch(me.lkey(key), rspchan)
 	return rspchan
 }

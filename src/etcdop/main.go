@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	etcd    = flag.String("etcd", "192.168.116.251:2379", "address of etcd")
+	etcd    = flag.String("etcd", "192.168.13.100:2379", "address of etcd")
 	sysname = flag.String("system", "knull", "name of system")
 	key     = flag.String("key", "test", "prefix of key")
 	op      = flag.String("op", "get", "operate")

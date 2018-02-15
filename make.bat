@@ -3,7 +3,7 @@
 set input=%1
 set pwd=%~dp0
 set bindir=%pwd%\bin\
-set GOPATH=F:/github/etcdcode
+set GOPATH=%pwd%
 
 if [%1] == [] goto:all
 

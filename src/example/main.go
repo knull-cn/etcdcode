@@ -18,6 +18,7 @@ func main() {
 	//testsyncmap()
 	//pageTest()
 	//etcdTest()
-	MonitorTest()
+	//MonitorTest()
 	//WatchRunning()
+	StartMyRPC()
 }

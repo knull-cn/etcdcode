@@ -3,23 +3,23 @@
     "mnodes": [
         {
             "pname": "gateway",
-            "address": ":9877"
+            "address": "192.168.13.101:9877"
         },
         {
             "pname": "logic",
-            "address": ":9876"
+            "address": "192.168.13.101:9876"
         },
         {
             "pname": "room",
-            "address": ":9875"
+            "address": "192.168.13.101:9875"
         },
         {
             "pname": "dbmgr",
-            "address": ":9874"
+            "address": "192.168.13.101:9874"
         },
         {
             "pname": "example",
-            "address": ":9873"
+            "address": "192.168.13.101:9873"
         }
     ]
 }
